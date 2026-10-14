@@ -1,730 +1,994 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Reader & Audio Player</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a2e;
-            color: #e0e0e0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reader</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root {
+    --bg: #0b0d14;
+    --surface: rgba(30, 33, 46, .55);
+    --glass-border: rgba(255, 255, 255, .12);
+    --text: #eceff7;
+    --muted: #9aa1b5;
+    --primary: #a9c4ff;
+    --primary-ink: #0a1b3d;
+    --danger: #ff8a9a;
+    --radius: 20px;
+    --shadow: 0 12px 40px rgba(0, 0, 0, .35);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+svg { fill: currentColor; }
+.hidden { display: none !important; }
 
-        .header {
-            background: #16213e;
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #0f3460;
-            flex-shrink: 0;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
+.blob {
+    position: fixed; border-radius: 50%; filter: blur(90px); opacity: .35;
+    pointer-events: none; z-index: 0; animation: drift 24s ease-in-out infinite alternate;
+}
+.blob.b1 { width: 480px; height: 480px; background: #4b6bff; top: -140px; left: -80px; }
+.blob.b2 { width: 420px; height: 420px; background: #9b5cff; bottom: -160px; right: -60px; animation-delay: -8s; }
+.blob.b3 { width: 320px; height: 320px; background: #20c4b0; top: 40%; left: 45%; opacity: .18; animation-delay: -14s; }
+@keyframes drift { to { transform: translate(60px, 40px) scale(1.08); } }
+@keyframes pop { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
 
-        .header h1 { font-size: 1.2rem; font-weight: 500; color: #e94560; }
-        .header-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.icon-btn {
+    width: 40px; height: 40px; border: none; border-radius: 12px;
+    background: transparent; color: var(--text); cursor: pointer;
+    display: inline-grid; place-items: center; flex-shrink: 0;
+    transition: background .2s, transform .15s, color .2s;
+}
+.icon-btn:hover { background: rgba(255, 255, 255, .1); }
+.icon-btn:active { transform: scale(.94); }
+.icon-btn.active { background: rgba(169, 196, 255, .18); color: var(--primary); }
+.icon-btn.danger:hover { color: var(--danger); }
+.icon-btn svg { width: 22px; height: 22px; }
+.icon-btn.sm { width: 32px; height: 32px; border-radius: 10px; }
+.icon-btn.sm svg { width: 18px; height: 18px; }
 
-        .btn {
-            background: #0f3460;
-            color: #e0e0e0;
-            border: 1px solid #1a5276;
-            padding: 6px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: all 0.2s;
-        }
-        .btn:hover { background: #1a5276; border-color: #e94560; }
-        .btn.active { background: #e94560; border-color: #e94560; }
-        .btn.danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
+.topbar {
+    position: fixed; top: 14px; left: 14px; right: 14px; height: 60px; z-index: 50;
+    display: flex; align-items: center; gap: 10px; padding: 0 10px;
+    background: var(--surface);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid var(--glass-border); border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.brand {
+    font-weight: 600; font-size: .95rem; padding: 0 6px; min-width: 0; max-width: 260px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.spacer { flex: 1; }
+.sep { width: 1px; height: 20px; background: var(--glass-border); margin: 0 4px; }
 
-        .page-nav { display: flex; align-items: center; gap: 8px; }
-        .page-nav input {
-            width: 60px; padding: 5px 8px; border: 1px solid #0f3460;
-            background: #16213e; color: #e0e0e0; border-radius: 6px;
-            text-align: center; font-size: 0.85rem;
-        }
-        .page-nav input:focus { outline: none; border-color: #e94560; }
+.toolbar {
+    display: flex; align-items: center; gap: 4px; padding: 4px;
+    border-radius: 14px; background: rgba(255, 255, 255, .05);
+}
+.page-input {
+    width: 54px; height: 32px; border-radius: 10px; border: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, .25); color: var(--text); text-align: center; font: inherit; font-size: .85rem;
+}
+.page-input:focus { outline: none; border-color: var(--primary); }
+.muted { color: var(--muted); font-size: .8rem; }
+.zoom-label {
+    min-width: 46px; text-align: center; font-size: .8rem; color: var(--muted);
+    font-variant-numeric: tabular-nums; cursor: pointer; border-radius: 8px; padding: 4px 2px;
+}
+.zoom-label:hover { color: var(--text); }
 
-        .zoom-controls { display: flex; align-items: center; gap: 6px; }
-        .zoom-level { font-size: 0.8rem; color: #aaa; min-width: 40px; text-align: center; }
+.mini-player {
+    display: none; align-items: center; gap: 8px; height: 44px; padding: 4px 6px 4px 4px;
+    border-radius: 14px; background: rgba(255, 255, 255, .07); border: 1px solid var(--glass-border);
+}
+.mini-player.show { display: flex; animation: pop .3s ease; }
+.mini-play {
+    width: 34px; height: 34px; border-radius: 50%; border: none; flex-shrink: 0;
+    background: var(--primary); color: var(--primary-ink); cursor: pointer;
+    display: grid; place-items: center;
+}
+.mini-play svg { width: 18px; height: 18px; }
+.mini-info { width: 150px; min-width: 0; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+.mini-title { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .15); cursor: pointer; overflow: hidden; }
+.mini-bar span { display: block; height: 100%; width: 0; background: var(--primary); transition: width .25s linear; }
 
-        .main-content { display: flex; flex: 1; overflow: hidden; }
+.main { position: fixed; inset: 0; padding: 88px 20px 20px; z-index: 1; }
+.pdf-view {
+    height: 100%; overflow: auto; display: flex; padding: 12px 0 40px;
+    scrollbar-width: thin;
+}
+.pages { display: flex; gap: 18px; align-items: flex-start; margin: auto; }
+.page {
+    background: #fff; border-radius: 6px; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+}
+.page canvas { display: block; }
 
-        .pdf-container {
-            flex: 1; overflow-y: auto; padding: 20px;
-            display: flex; justify-content: center; align-items: flex-start;
-            background: #121220;
-        }
+.empty { height: 100%; display: grid; place-items: center; }
+.drop-card {
+    width: min(520px, 100%); padding: 48px 40px; text-align: center; border-radius: 28px;
+    background: var(--surface); border: 1.5px dashed rgba(169, 196, 255, .35);
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+}
+.drop-icon {
+    width: 84px; height: 84px; margin: 0 auto 20px; border-radius: 26px;
+    background: linear-gradient(135deg, rgba(169, 196, 255, .25), rgba(199, 166, 255, .25));
+    display: grid; place-items: center; color: var(--primary);
+}
+.drop-icon svg { width: 40px; height: 40px; }
+.drop-card h2 { font-size: 1.35rem; font-weight: 600; margin-bottom: 8px; }
+.drop-card p { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+.primary-btn {
+    margin-top: 22px; height: 44px; padding: 0 22px; border: none; border-radius: 14px;
+    background: var(--primary); color: var(--primary-ink); font: inherit; font-weight: 600; cursor: pointer;
+}
+.primary-btn:hover { filter: brightness(1.08); }
 
-        .pdf-pages-row {
-            display: flex; gap: 15px; align-items: flex-start; justify-content: center;
-        }
+.scrim {
+    position: fixed; inset: 0; background: rgba(3, 4, 8, .45); z-index: 60;
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.scrim.show { opacity: 1; pointer-events: auto; }
+.drawer {
+    position: fixed; top: 14px; left: 14px; bottom: 14px; width: 360px;
+    max-width: calc(100vw - 28px); z-index: 70; display: flex; flex-direction: column; overflow: hidden;
+    background: rgba(20, 23, 34, .82);
+    backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%);
+    border: 1px solid var(--glass-border); border-radius: var(--radius); box-shadow: var(--shadow);
+    transform: translateX(-120%); transition: transform .4s cubic-bezier(.2, .8, .2, 1);
+}
+.drawer.open { transform: none; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 14px 10px 22px; }
+.drawer-head h2 { font-size: 1.1rem; font-weight: 600; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 6px 14px 20px; }
+.section { margin-bottom: 24px; }
+.section-title {
+    font-size: .72rem; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    margin: 6px 8px 10px; display: flex; justify-content: space-between;
+}
+.dropbox {
+    border: 1.5px dashed rgba(169, 196, 255, .3); border-radius: 16px; padding: 14px;
+    display: flex; align-items: center; gap: 12px; cursor: pointer; margin-bottom: 10px; transition: .2s;
+}
+.dropbox:hover, .dropbox.drag { border-color: var(--primary); background: rgba(169, 196, 255, .08); }
+.dropbox .thumb { color: var(--primary); }
+.dropbox strong { font-weight: 600; font-size: .9rem; }
+.dropbox .sub { margin-top: 2px; }
+.volume { display: flex; align-items: center; gap: 10px; padding: 6px 10px 12px; color: var(--muted); }
+.volume svg { width: 18px; height: 18px; flex-shrink: 0; }
+.volume input { flex: 1; accent-color: var(--primary); }
+.np { display: none; margin: 0 0 8px; padding: 10px 12px 10px; border-radius: 14px; background: rgba(255, 255, 255, .05); }
+.np.show { display: block; }
+.np-top { display: flex; align-items: center; gap: 10px; }
+.np-title { flex: 1; min-width: 0; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-time { font-size: .72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.np-bar { position: relative; height: 18px; margin-top: 6px; cursor: pointer; }
+.np-bar::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 5px;
+    transform: translateY(-50%); border-radius: 3px; background: rgba(255, 255, 255, .12);
+}
+.np-bar span {
+    position: absolute; left: 0; top: 50%; height: 5px; width: 0;
+    transform: translateY(-50%); border-radius: 3px; background: var(--primary);
+}
+.list { display: flex; flex-direction: column; gap: 4px; }
+.row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border-radius: 14px; cursor: pointer; transition: background .2s;
+}
+.row:hover { background: rgba(255, 255, 255, .06); }
+.row.active { background: rgba(169, 196, 255, .14); }
+.row .thumb {
+    width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+    display: grid; place-items: center; background: rgba(255, 255, 255, .08);
+}
+.row .thumb svg { width: 18px; height: 18px; fill: var(--primary); }
+.row .meta { flex: 1; min-width: 0; }
+.row .name { font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .sub { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+.row .icon-btn { opacity: .5; }
+.row:hover .icon-btn { opacity: 1; }
+.empty-text { font-size: .8rem; color: var(--muted); padding: 8px 10px; }
 
-        .pdf-page-wrapper {
-            margin-bottom: 15px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-            border-radius: 4px;
-            background: white;
-        }
+.video-layer { position: fixed; inset: 0; z-index: 80; display: none; }
+.video-layer.open { display: block; }
+.video-backdrop {
+    position: absolute; inset: 0; background: rgba(4, 5, 9, .66);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    opacity: 0; transition: opacity .35s; display: none;
+}
+.video-layer.spot .video-backdrop { display: block; opacity: 1; }
+.video-layer.mini { pointer-events: none; }
+.video-win {
+    position: absolute; display: flex; flex-direction: column; min-height: 0;
+    background: rgba(18, 21, 31, .92);
+    backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+    border: 1px solid var(--glass-border); border-radius: 24px; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+    transition: width .45s cubic-bezier(.2, .8, .2, 1), transform .45s cubic-bezier(.2, .8, .2, 1);
+}
+.video-layer.spot .video-win {
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(980px, 94vw); max-height: 88vh;
+}
+.video-layer.mini .video-win {
+    pointer-events: auto; right: 20px; bottom: 20px;
+    width: min(380px, calc(100vw - 40px));
+}
+.video-layer.spot #vwMax, .video-layer.mini #vwMin { display: none; }
+.vw-head { display: flex; align-items: center; gap: 6px; padding: 10px 10px 10px 16px; }
+.vw-title { flex: 1; min-width: 0; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vw-player { background: #000; flex-shrink: 0; }
+.vw-player video { width: 100%; max-height: 62vh; display: block; background: #000; }
+.vw-library { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+.video-layer.mini .vw-library { display: none; }
+.vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.vcard {
+    position: relative; display: flex; flex-direction: column; gap: 12px; min-height: 110px;
+    padding: 14px; border-radius: 16px; cursor: pointer; text-align: left; color: var(--text);
+    font: inherit; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .06);
+    transition: .2s;
+}
+.vcard:hover { background: rgba(255, 255, 255, .09); }
+.vcard.active { border-color: var(--primary); }
+.vcard.add {
+    align-items: center; justify-content: center; color: var(--muted);
+    border: 1.5px dashed rgba(169, 196, 255, .35);
+}
+.vcard.add svg { width: 22px; height: 22px; fill: var(--primary); }
+.vc-icon {
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+    background: rgba(169, 196, 255, .14);
+}
+.vc-icon svg { width: 20px; height: 20px; fill: var(--primary); }
+.vc-name { font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: auto; }
+.vc-del { position: absolute; top: 8px; right: 8px; opacity: .5; }
+.vcard:hover .vc-del { opacity: 1; }
 
-        .pdf-page-wrapper canvas { display: block; }
+.drop-hint {
+    position: fixed; inset: 14px; z-index: 90; display: none; align-items: center; justify-content: center;
+    border: 2px dashed var(--primary); border-radius: 28px; background: rgba(10, 12, 20, .6);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    color: var(--primary); font-size: 1.2rem; font-weight: 600; pointer-events: none;
+}
+body.dragging .drop-hint { display: flex; }
 
-        .drop-zone {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            height: 100%; width: 100%; border: 3px dashed #0f3460;
-            border-radius: 12px; margin: 40px; padding: 60px; text-align: center;
-            transition: all 0.3s;
-        }
-        .drop-zone.drag-over { border-color: #e94560; background: rgba(233, 69, 96, 0.1); }
-        .drop-zone svg { width: 80px; height: 80px; margin-bottom: 20px; fill: #0f3460; }
-        .drop-zone.drag-over svg { fill: #e94560; }
-        .drop-zone h2 { font-size: 1.3rem; margin-bottom: 10px; color: #e0e0e0; }
-        .drop-zone p { color: #888; font-size: 0.9rem; margin-bottom: 6px; }
+.loading {
+    position: fixed; inset: 0; z-index: 95; display: none; place-items: center;
+    background: rgba(0, 0, 0, .2);
+}
+.loading.show { display: grid; }
+.spinner {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 4px solid rgba(255, 255, 255, .12); border-top-color: var(--primary);
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-        .recent-list {
-            margin-top: 20px; text-align: left; max-width: 420px; width: 100%;
-        }
-        .recent-list h3 { font-size: 0.85rem; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-        .recent-item {
-            display: flex; align-items: center; justify-content: space-between; gap: 8px;
-            background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
-            padding: 8px 12px; margin-bottom: 6px; cursor: pointer; font-size: 0.8rem;
-            transition: all 0.2s;
-        }
-        .recent-item:hover { border-color: #e94560; }
-        .recent-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .recent-item .del { background: none; border: none; color: #888; cursor: pointer; font-size: 0.9rem; padding: 2px 6px; border-radius: 4px; }
-        .recent-item .del:hover { color: #ff6b6b; background: rgba(255,107,107,0.1); }
+.toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+    z-index: 100; padding: 10px 18px; border-radius: 14px; font-size: .85rem;
+    background: rgba(30, 33, 46, .9); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px); transition: transform .3s;
+    pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
 
-        .audio-panel {
-            width: 280px; min-width: 280px; background: #16213e;
-            border-left: 1px solid #0f3460; display: flex; flex-direction: column;
-            transition: width 0.3s, min-width 0.3s;
-        }
-        .audio-panel.collapsed { width: 50px; min-width: 50px; }
-        .audio-panel.collapsed .audio-body, .audio-panel.collapsed .audio-header h3 { display: none; }
+.mode-select {
+    height: 32px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, .25); color: var(--text); font: inherit; font-size: .8rem; cursor: pointer;
+}
+.mode-select:focus { outline: none; border-color: var(--primary); }
+.mode-select option { background: #1e212e; color: var(--text); }
 
-        .audio-header {
-            padding: 12px 15px; display: flex; align-items: center;
-            justify-content: space-between; border-bottom: 1px solid #0f3460;
-        }
-        .audio-header h3 { font-size: 0.9rem; font-weight: 500; color: #e94560; }
-        .toggle-audio { background: none; border: none; color: #e0e0e0; cursor: pointer; padding: 4px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .12); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .25); }
 
-        .audio-body { flex: 1; overflow-y: auto; padding: 10px; }
-
-        .audio-file-list { display: flex; flex-direction: column; gap: 8px; }
-
-        .audio-file-item {
-            background: #1a1a2e; border: 1px solid #0f3460; border-radius: 8px;
-            padding: 10px; transition: all 0.2s;
-        }
-        .audio-file-item.active { border-color: #e94560; background: rgba(233, 69, 96, 0.1); }
-
-        .audio-filename { font-size: 0.8rem; color: #e0e0e0; margin-bottom: 8px; word-break: break-all; }
-
-        .audio-controls { display: flex; align-items: center; gap: 8px; }
-
-        .play-btn {
-            width: 36px; height: 36px; border-radius: 50%; background: #e94560;
-            border: none; color: white; cursor: pointer; display: flex;
-            align-items: center; justify-content: center; transition: transform 0.2s;
-            flex-shrink: 0;
-        }
-        .play-btn:hover { transform: scale(1.1); }
-
-        .audio-progress-container {
-            flex: 1; height: 6px; background: #0f3460; border-radius: 3px;
-            cursor: pointer; position: relative; overflow: hidden;
-        }
-        .audio-progress-bar { height: 100%; background: #e94560; border-radius: 3px; width: 0%; }
-
-        .audio-time { font-size: 0.7rem; color: #888; min-width: 35px; text-align: right; }
-
-        .volume-control {
-            display: flex; align-items: center; gap: 6px; margin-top: 10px;
-            padding-top: 10px; border-top: 1px solid #0f3460;
-        }
-        .volume-slider {
-            -webkit-appearance: none; appearance: none; width: 80px; height: 4px;
-            background: #0f3460; border-radius: 2px; outline: none;
-        }
-        .volume-slider::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none; width: 12px; height: 12px;
-            background: #e94560; border-radius: 50%; cursor: pointer;
-        }
-
-        .audio-drop-zone {
-            border: 2px dashed #0f3460; border-radius: 8px; padding: 15px;
-            text-align: center; margin-bottom: 10px; transition: all 0.3s;
-            cursor: pointer;
-        }
-        .audio-drop-zone.drag-over { border-color: #e94560; background: rgba(233, 69, 96, 0.05); }
-        .audio-drop-zone p { font-size: 0.75rem; color: #888; }
-
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #16213e; }
-        ::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #e94560; }
-
-        .loading { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; }
-        .loading.show { display: block; }
-        .spinner { width: 50px; height: 50px; border: 4px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .file-input { display: none; }
-
-        .toast {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px);
-            background: #e94560; color: white; padding: 10px 20px; border-radius: 8px;
-            font-size: 0.85rem; z-index: 2000; transition: transform 0.3s; pointer-events: none;
-        }
-        .toast.show { transform: translateX(-50%) translateY(0); }
-    </style>
+@media (max-width: 760px) {
+    .brand, .zoom-label, #viewMode { display: none; }
+    .mini-info { width: 96px; }
+    .video-layer.spot .video-win { width: 96vw; }
+}
+</style>
 </head>
 <body>
-    <div class="loading" id="loading"><div class="spinner"></div></div>
-    <div class="toast" id="toast"></div>
-    <input type="file" id="pdfInput" class="file-input" accept="application/pdf,.pdf">
-    <input type="file" id="audioInput" class="file-input" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac" multiple>
+<div class="blob b1"></div>
+<div class="blob b2"></div>
+<div class="blob b3"></div>
 
-    <div class="header">
-        <h1>📖 PDF Reader & Audio Player</h1>
-        <div class="header-controls">
-            <button class="btn" id="dropPdfBtn" title="Open a PDF file">📄 Open PDF</button>
-            <button class="btn danger" id="closePdfBtn" style="display:none;">✖ Close PDF</button>
-            <div class="page-nav">
-                <button class="btn" id="prevPage">◀</button>
-                <input type="number" id="pageNumber" min="1" value="1">
-                <span style="color:#888; font-size:0.85rem;">/ <span id="totalPages">-</span></span>
-                <button class="btn" id="nextPage">▶</button>
-            </div>
-            <div class="zoom-controls">
-                <button class="btn" id="zoomOut">−</button>
-                <span class="zoom-level" id="zoomLevel">100%</span>
-                <button class="btn" id="zoomIn">+</button>
-            </div>
-            <button class="btn" id="viewMode">2 Pages</button>
+<header class="topbar">
+    <button class="icon-btn" id="menuBtn" title="Menu" aria-label="Menu" data-icon="menu"></button>
+
+    <div class="mini-player" id="miniPlayer">
+        <button class="mini-play" id="miniPlay" title="Play / pause" aria-label="Play or pause"></button>
+        <div class="mini-info" id="miniInfo" title="Open menu">
+            <div class="mini-title" id="miniTitle"></div>
+            <div class="mini-bar" id="miniBar"><span id="miniProgress"></span></div>
         </div>
+        <button class="icon-btn sm" id="miniClose" title="Stop" aria-label="Stop" data-icon="close"></button>
     </div>
 
-    <div class="main-content">
-        <div class="pdf-container" id="pdfContainer">
-            <div class="drop-zone" id="pdfDropZone">
-                <svg viewBox="0 0 24 24"><path d="M14,2H6A2,2,0,0,0,4,4V20a2,2,0,0,0,2,2H18a2,2,0,0,0,2-2V8Zm5,18V12H17V8H13V4H9V8H6V20H18ZM13,10v4h3V10Z"/></svg>
-                <h2>Drop a PDF file here</h2>
-                <p>or click "Open PDF" to browse your files</p>
-                <p style="margin-top:4px;">Files are stored in your browser and stay available when you come back.</p>
-                <div class="recent-list" id="recentList" style="display:none;">
-                    <h3>Recent PDFs</h3>
-                    <div id="recentItems"></div>
-                </div>
-            </div>
-            <div id="pdfRender" style="display:none;"></div>
-        </div>
+    <div class="brand" id="brand">Reader</div>
+    <div class="spacer"></div>
 
-        <div class="audio-panel" id="audioPanel">
-            <div class="audio-header">
-                <h3>🎵 Audio Player</h3>
-                <button class="toggle-audio" id="toggleAudio" title="Toggle panel">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41,7.41L14,6L6,14l8,8L22,8l-6.59-6.59Z"/></svg>
-                </button>
-            </div>
-            <div class="audio-body">
-                <div class="audio-drop-zone" id="audioDropZone">
-                    <p>📁 Drop audio files here<br>or click to browse</p>
-                </div>
-                <div class="audio-file-list" id="audioFileList"></div>
-                <div class="volume-control">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#888"><path d="M3,9V15H7L12,20V4L7,9H3ZM16.5,12C16.5,10.23,15.5,8.71,14,7.97V16.02C15.5,15.29,16.5,13.76,16.5,12Z"/></svg>
-                    <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.01" value="0.8">
-                </div>
-            </div>
-        </div>
+    <div class="toolbar hidden" id="pdfTools">
+        <button class="icon-btn sm" id="prevPage" title="Previous page" aria-label="Previous page" data-icon="prev"></button>
+        <input class="page-input" id="pageInput" type="number" min="1" value="1" title="Go to page">
+        <span class="muted" id="pageTotal">/ 0</span>
+        <button class="icon-btn sm" id="nextPage" title="Next page" aria-label="Next page" data-icon="next"></button>
+        <span class="sep"></span>
+        <button class="icon-btn sm" id="zoomOut" title="Zoom out" aria-label="Zoom out" data-icon="minus"></button>
+        <span class="zoom-label" id="zoomLabel" title="Fit to screen">100%</span>
+        <button class="icon-btn sm" id="zoomIn" title="Zoom in" aria-label="Zoom in" data-icon="plus"></button>
+        <span class="sep"></span>
+        <select class="mode-select" id="viewMode" title="Page view" aria-label="Page view">
+            <option value="single">Single page</option>
+            <option value="even">Two pages: even</option>
+            <option value="uneven">Two pages: uneven</option>
+        </select>
     </div>
 
-    <script>
-        // ---------- PDF.js setup ----------
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    <button class="icon-btn" id="videoBtn" title="Videos" aria-label="Videos" data-icon="movie"></button>
+    <button class="icon-btn" id="openPdfBtn" title="Open PDF" aria-label="Open PDF" data-icon="folder"></button>
+    <button class="icon-btn danger hidden" id="closePdfBtn" title="Close PDF" aria-label="Close PDF" data-icon="close"></button>
+</header>
 
-        // ---------- State ----------
-        let pdfDoc = null;          // pdf.js document
-        let pdfBytes = null;        // raw ArrayBuffer of the current PDF (for re-render)
-        let currentPdfName = '';
-        let currentPage = 1;
-        let totalPages = 0;
-        let scale = 1.5;
-        let twoPageMode = false;
-        let audioFiles = [];        // { name, id }
-        let audioUrls = {};         // id -> object URL
-        let currentAudioIndex = -1;
-        let audioElements = [];
-        let isPlaying = false;
+<main class="main">
+    <div class="pdf-view hidden" id="pdfView"><div class="pages" id="pages"></div></div>
+    <section class="empty" id="empty">
+        <div class="drop-card">
+            <div class="drop-icon" data-icon-box="doc"></div>
+            <h2>Drop anything here</h2>
+            <p>PDFs open in this view. Audio is added to your library in the menu.<br>Videos open in the player.</p>
+            <button class="primary-btn" id="emptyOpen">Choose a PDF</button>
+        </div>
+    </section>
+</main>
 
-        // ---------- DOM ----------
-        const pdfContainer   = document.getElementById('pdfContainer');
-        const pdfDropZone    = document.getElementById('pdfDropZone');
-        const pdfRender      = document.getElementById('pdfRender');
-        const pageNumberInput= document.getElementById('pageNumber');
-        const totalPagesSpan = document.getElementById('totalPages');
-        const zoomLevelSpan  = document.getElementById('zoomLevel');
-        const viewModeBtn    = document.getElementById('viewMode');
-        const closePdfBtn    = document.getElementById('closePdfBtn');
-        const recentList     = document.getElementById('recentList');
-        const recentItems    = document.getElementById('recentItems');
-        const audioPanel     = document.getElementById('audioPanel');
-        const audioDropZone  = document.getElementById('audioDropZone');
-        const audioFileList  = document.getElementById('audioFileList');
-        const volumeSlider   = document.getElementById('volumeSlider');
-        const loading        = document.getElementById('loading');
-        const toast          = document.getElementById('toast');
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Library">
+    <div class="drawer-head">
+        <h2>Library</h2>
+        <button class="icon-btn sm" id="drawerClose" title="Close menu" aria-label="Close menu" data-icon="close"></button>
+    </div>
+    <div class="drawer-body">
+        <div class="section">
+            <div class="section-title"><span>Audio</span><span id="audioCount"></span></div>
+            <div class="dropbox" id="audioDrop">
+                <div class="thumb" data-icon-box="music"></div>
+                <div>
+                    <strong>Add audio</strong>
+                    <div class="muted sub">Click to browse or drop files</div>
+                </div>
+            </div>
+            <div class="volume">
+                <span data-icon-box="volume"></span>
+                <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8" aria-label="Volume">
+            </div>
+            <div class="np" id="np">
+                <div class="np-top">
+                    <button class="icon-btn sm" id="npPlay" aria-label="Play or pause"></button>
+                    <div class="np-title" id="npTitle"></div>
+                    <span class="np-time" id="npTime">0:00 / 0:00</span>
+                </div>
+                <div class="np-bar" id="npBar"><span id="npProgress"></span></div>
+            </div>
+            <div class="list" id="audioList"></div>
+        </div>
+        <div class="section">
+            <div class="section-title"><span>Recent PDFs</span></div>
+            <div class="list" id="recentList"></div>
+        </div>
+    </div>
+</aside>
 
-        // ---------- IndexedDB (persistent file storage) ----------
-        const DB_NAME = 'pdfAudioReaderDB';
-        const DB_VERSION = 1;
-        let db = null;
+<div class="video-layer" id="videoLayer">
+    <div class="video-backdrop" id="videoBackdrop"></div>
+    <div class="video-win" id="videoWin">
+        <div class="vw-head">
+            <div class="vw-title" id="vwTitle">Videos</div>
+            <button class="icon-btn sm" id="vwUpload" title="Upload videos" aria-label="Upload videos" data-icon="upload"></button>
+            <button class="icon-btn sm" id="vwMin" title="Minimize" aria-label="Minimize" data-icon="minus"></button>
+            <button class="icon-btn sm" id="vwMax" title="Expand" aria-label="Expand" data-icon="expand"></button>
+            <button class="icon-btn sm danger" id="vwClose" title="Close" aria-label="Close" data-icon="close"></button>
+        </div>
+        <div class="vw-player hidden" id="vwPlayerWrap">
+            <video id="videoEl" controls playsinline></video>
+        </div>
+        <div class="vw-library">
+            <div class="vgrid" id="videoGrid"></div>
+        </div>
+    </div>
+</div>
 
-        function openDB() {
-            return new Promise((resolve, reject) => {
-                const req = indexedDB.open(DB_NAME, DB_VERSION);
-                req.onupgradeneeded = (e) => {
-                    const d = e.target.result;
-                    if (!d.objectStoreNames.contains('files')) d.createObjectStore('files', { keyPath: 'id' });
-                };
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
-        }
+<div class="drop-hint">Drop PDFs, audio or videos to add them</div>
+<div class="loading" id="loading"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
 
-        async function dbPut(record) {
-            const tx = db.transaction('files', 'readwrite');
-            tx.objectStore('files').put(record);
-            return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-        }
+<input type="file" id="pdfInput" accept="application/pdf,.pdf" hidden>
+<input type="file" id="audioInput" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.opus" multiple hidden>
+<input type="file" id="videoInput" accept="video/*,.mp4,.webm,.mov,.m4v,.ogv" multiple hidden>
 
-        async function dbGet(id) {
-            const tx = db.transaction('files', 'readonly');
-            const req = tx.objectStore('files').get(id);
-            return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
-        }
+<script>
+// ---------- Icons ----------
+const ICONS = {
+    menu: 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z',
+    folder: 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z',
+    movie: 'M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z',
+    play: 'M8 5v14l11-7z',
+    pause: 'M6 19h4V5H6v14zm8-14v14h4V5h-4z',
+    prev: 'M6 6h2v12H6zm3.5 6l8.5 6V6z',
+    next: 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z',
+    plus: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
+    minus: 'M19 13H5v-2h14v2z',
+    close: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
+    upload: 'M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z',
+    expand: 'M3 3h7v2H5v5H3V3zm18 0v7h-2V5h-5V3h7zM3 21v-7h2v5h5v2H3zm18 0h-7v-2h5v-5h2v7z',
+    music: 'M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z',
+    trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
+    volume: 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z',
+    doc: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z'
+};
+const svg = n => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[n]}"/></svg>`;
+document.querySelectorAll('[data-icon]').forEach(e => e.innerHTML = svg(e.dataset.icon));
+document.querySelectorAll('[data-icon-box]').forEach(e => e.innerHTML = svg(e.dataset.iconBox));
 
-        async function dbGetAll() {
-            const tx = db.transaction('files', 'readonly');
-            const req = tx.objectStore('files').getAll();
-            return new Promise((res, rej) => { req.onsuccess = () => res(req.result || []); req.onerror = () => rej(req.error); });
-        }
+// ---------- Setup ----------
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const $ = id => document.getElementById(id);
 
-        async function dbDelete(id) {
-            const tx = db.transaction('files', 'readwrite');
-            tx.objectStore('files').delete(id);
-            return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-        }
+let db = null;
+let pdfDoc = null, currentPdfId = null, currentPage = 1, totalPages = 0;
+let scale = 1, pageView = 'single', renderToken = 0; // 'single' | 'even' | 'uneven'
+const isTwoPage = () => pageView !== 'single';
+let audioList = [], currentTrackId = null;
+let videoList = [], currentVideoId = null;
+let recentPdfs = [];
+const urlCache = {};
+const audio = new Audio();
+audio.preload = 'metadata';
+const videoEl = $('videoEl');
 
-        function makeId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+// ---------- IndexedDB (same database as before, so existing files carry over) ----------
+const DB_NAME = 'pdfAudioReaderDB';
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = e => {
+            const d = e.target.result;
+            if (!d.objectStoreNames.contains('files')) d.createObjectStore('files', { keyPath: 'id' });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+const store = mode => db.transaction('files', mode).objectStore('files');
+const req2p = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const dbPut = rec => req2p(store('readwrite').put(rec));
+const dbGet = id => req2p(store('readonly').get(id));
+const dbGetAll = () => req2p(store('readonly').getAll());
+const dbDelete = id => req2p(store('readwrite').delete(id));
+const makeId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-        function showToast(msg) {
-            toast.textContent = msg;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2200);
-        }
+async function urlFor(id) {
+    if (urlCache[id]) return urlCache[id];
+    const rec = await dbGet(id);
+    if (!rec) return null;
+    const type = rec.mime || (rec.type === 'video' ? 'video/mp4' : 'audio/mpeg');
+    urlCache[id] = URL.createObjectURL(new Blob([rec.data], { type }));
+    return urlCache[id];
+}
 
-        // ---------- PDF helpers ----------
-        function isPdfFile(file) {
-            return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-        }
+// ---------- Helpers ----------
+let toastTimer;
+function showToast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function setLoading(on) { $('loading').classList.toggle('show', on); }
 
-        async function loadPdfFromFile(file) {
-            loading.classList.add('show');
-            try {
-                const buffer = await file.arrayBuffer();
-                await openPdf(buffer, file.name);
-                // persist
-                await dbPut({ id: 'pdf-' + currentPdfName, name: file.name, type: 'pdf', data: buffer, added: Date.now() });
-                renderRecentList();
-            } catch (err) {
-                alert('Error loading PDF: ' + err.message);
-                console.error(err);
-            } finally {
-                loading.classList.remove('show');
-            }
-        }
+const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+const isAudio = f => /^audio\//.test(f.type) || /\.(mp3|wav|ogg|m4a|flac|aac|opus)$/i.test(f.name);
+const isVideo = f => /^video\//.test(f.type) || /\.(mp4|webm|mov|m4v|ogv)$/i.test(f.name);
 
-        async function loadPdfFromStore(id, name) {
-            loading.classList.add('show');
-            try {
-                const rec = await dbGet(id);
-                if (!rec) { showToast('File not found'); return; }
-                await openPdf(rec.data, rec.name || name);
-            } catch (err) {
-                alert('Error loading PDF: ' + err.message);
-                console.error(err);
-            } finally {
-                loading.classList.remove('show');
-            }
-        }
+// ---------- Library ----------
+async function refreshLibrary() {
+    if (!db) return;
+    const all = await dbGetAll();
+    const byType = t => all.filter(r => r.type === t).sort((a, b) => (a.added || 0) - (b.added || 0));
+    audioList = byType('audio').map(r => ({ id: r.id, name: r.name }));
+    videoList = byType('video').map(r => ({ id: r.id, name: r.name }));
+    recentPdfs = all.filter(r => r.type === 'pdf')
+        .sort((a, b) => (b.added || 0) - (a.added || 0))
+        .map(r => ({ id: r.id, name: r.name }));
+    renderAudioList();
+    renderVideoGrid();
+    renderRecent();
+    updateMini();
+}
 
-        async function openPdf(arrayBuffer, name) {
-            pdfBytes = arrayBuffer;
-            currentPdfName = name;
-            pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice(0) }).promise; // copy so buffer stays usable
-            totalPages = pdfDoc.numPages;
-            totalPagesSpan.textContent = totalPages;
-            pageNumberInput.max = totalPages;
-            currentPage = 1;
-            pageNumberInput.value = 1;
-
-            pdfDropZone.style.display = 'none';
-            pdfRender.style.display = 'block';
-            closePdfBtn.style.display = 'inline-block';
-            document.title = '📖 ' + name;
-            renderPdf();
-        }
-
-        function closePdf() {
-            pdfDoc = null; pdfBytes = null; currentPdfName = '';
-            pdfRender.innerHTML = '';
-            pdfRender.style.display = 'none';
-            pdfDropZone.style.display = 'flex';
-            closePdfBtn.style.display = 'none';
-            totalPagesSpan.textContent = '-';
-            pageNumberInput.value = 1;
-            document.title = 'PDF Reader & Audio Player';
-            renderRecentList();
-        }
-
-        async function renderPdf() {
-            pdfRender.innerHTML = '';
-            if (!pdfDoc) return;
-
-            let startPage = twoPageMode
-                ? (currentPage % 2 === 0 ? currentPage : currentPage - 1)
-                : currentPage;
-            if (startPage < 1) startPage = 1;
-
-            const pagesToShow = twoPageMode ? Math.min(2, totalPages - startPage + 1) : 1;
-
-            const row = document.createElement('div');
-            row.className = 'pdf-pages-row';
-
-            for (let i = 0; i < pagesToShow; i++) {
-                const pageNum = startPage + i;
-                if (pageNum < 1 || pageNum > totalPages) continue;
-                try {
-                    const page = await pdfDoc.getPage(pageNum);
-                    const viewport = page.getViewport({ scale });
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'pdf-page-wrapper';
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    await page.render({ canvasContext: ctx, viewport }).promise;
-                    wrapper.appendChild(canvas);
-                    row.appendChild(wrapper);
-                } catch (err) {
-                    console.error('Error rendering page ' + pageNum + ':', err);
-                }
-            }
-            pdfRender.appendChild(row);
-        }
-
-        function goToPage(page) {
-            if (!pdfDoc || page < 1 || page > totalPages) return;
-            currentPage = page;
-            pageNumberInput.value = currentPage;
-            renderPdf();
-            pdfContainer.scrollTop = 0;
-        }
-
-        function changeZoom(delta) {
-            scale = Math.min(3, Math.max(0.5, scale + delta));
-            zoomLevelSpan.textContent = Math.round(scale * 100) + '%';
-            renderPdf();
-        }
-
-        // ---------- Recent PDFs list ----------
-        async function renderRecentList() {
-            const all = await dbGetAll();
-            const pdfs = all.filter(r => r.type === 'pdf').sort((a, b) => (b.added || 0) - (a.added || 0));
-            if (pdfs.length === 0) { recentList.style.display = 'none'; return; }
-            recentList.style.display = 'block';
-            recentItems.innerHTML = '';
-            pdfs.forEach(rec => {
-                const item = document.createElement('div');
-                item.className = 'recent-item';
-                item.title = rec.name;
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'name';
-                nameSpan.textContent = '📄 ' + rec.name;
-                const del = document.createElement('button');
-                del.className = 'del';
-                del.textContent = '✖';
-                del.title = 'Remove from list';
-                del.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    await dbDelete(rec.id);
-                    renderRecentList();
-                });
-                item.appendChild(nameSpan);
-                item.appendChild(del);
-                item.addEventListener('click', () => loadPdfFromStore(rec.id, rec.name));
-                recentItems.appendChild(item);
-            });
-        }
-
-        // ---------- Audio helpers ----------
-        function isAudioFile(file) {
-            return /^audio\//i.test(file.type) || /\.(mp3|wav|ogg|m4a|flac|aac|opus|weba)$/i.test(file.name);
-        }
-
-        async function addAudioFiles(files) {
-            for (const file of files) {
-                if (!isAudioFile(file)) continue;
+async function handleFiles(files) {
+    let firstVideo = null, lastPdf = null;
+    for (const f of files) {
+        try {
+            if (isPdf(f)) {
+                const id = 'pdf-' + f.name;
+                await dbPut({ id, name: f.name, type: 'pdf', mime: 'application/pdf', data: f, added: Date.now() });
+                lastPdf = id;
+            } else if (isAudio(f)) {
+                await dbPut({ id: makeId(), name: f.name, type: 'audio', mime: f.type, data: f, added: Date.now() });
+            } else if (isVideo(f)) {
                 const id = makeId();
-                try {
-                    const buf = await file.arrayBuffer();
-                    await dbPut({ id, name: file.name, type: 'audio', data: buf, added: Date.now() });
-                    audioUrls[id] = URL.createObjectURL(new Blob([buf], { type: file.type || 'audio/mpeg' }));
-                    audioFiles.push({ id, name: file.name });
-                } catch (err) {
-                    console.error('Error storing audio file:', err);
-                }
+                await dbPut({ id, name: f.name, type: 'video', mime: f.type, data: f, added: Date.now() });
+                if (!firstVideo) firstVideo = id;
+            } else {
+                showToast('Unsupported file: ' + f.name);
             }
-            renderAudioList();
+        } catch (err) {
+            console.error(err);
+            showToast('Could not save ' + f.name);
         }
+    }
+    await refreshLibrary();
+    if (lastPdf) openPdfById(lastPdf);
+    if (firstVideo) playVideo(firstVideo);
+}
 
-        async function loadAudioListFromDB() {
-            const all = await dbGetAll();
-            const auds = all.filter(r => r.type === 'audio').sort((a, b) => (a.added || 0) - (b.added || 0));
-            audioFiles = [];
-            for (const rec of auds) {
-                audioUrls[rec.id] = URL.createObjectURL(new Blob([rec.data], { type: 'audio/mpeg' }));
-                audioFiles.push({ id: rec.id, name: rec.name });
-            }
-            renderAudioList();
-        }
+async function removeItem(id, type) {
+    if (type === 'audio' && currentTrackId === id) stopAudio();
+    if (type === 'video' && currentVideoId === id) { currentVideoId = null; setVideoMode('closed'); }
+    if (type === 'pdf' && currentPdfId === id) closePdf();
+    if (urlCache[id]) { URL.revokeObjectURL(urlCache[id]); delete urlCache[id]; }
+    await dbDelete(id);
+    refreshLibrary();
+}
 
-        async function removeAudioFile(index) {
-            const f = audioFiles[index];
-            if (!f) return;
-            if (index === currentAudioIndex && audioElements[index]) audioElements[index].pause();
-            if (audioUrls[f.id]) URL.revokeObjectURL(audioUrls[f.id]);
-            delete audioUrls[f.id];
-            await dbDelete(f.id);
-            audioFiles.splice(index, 1);
-            audioElements.splice(index, 1);
-            if (currentAudioIndex === index) currentAudioIndex = -1;
-            else if (currentAudioIndex > index) currentAudioIndex--;
-            renderAudioList();
-        }
+// ---------- Audio ----------
+function renderAudioList() {
+    const list = $('audioList');
+    list.innerHTML = '';
+    $('audioCount').textContent = audioList.length ? audioList.length + (audioList.length === 1 ? ' track' : ' tracks') : '';
+    if (!audioList.length) {
+        list.innerHTML = '<div class="empty-text">No audio yet. Add files above.</div>';
+        return;
+    }
+    audioList.forEach(t => {
+        const active = t.id === currentTrackId;
+        const row = document.createElement('div');
+        row.className = 'row' + (active ? ' active' : '');
+        const icon = active && !audio.paused ? 'pause' : (active ? 'play' : 'music');
+        row.innerHTML = `
+            <div class="thumb">${svg(icon)}</div>
+            <div class="meta">
+                <div class="name"></div>
+                <div class="sub">${active ? (audio.paused ? 'Paused' : 'Now playing') : 'Audio'}</div>
+            </div>
+            <button class="icon-btn sm danger" title="Remove" aria-label="Remove">${svg('trash')}</button>`;
+        row.querySelector('.name').textContent = t.name;
+        row.addEventListener('click', () => playTrack(t.id));
+        row.querySelector('button').addEventListener('click', e => { e.stopPropagation(); removeItem(t.id, 'audio'); });
+        list.appendChild(row);
+    });
+}
 
-        function renderAudioList() {
-            audioFileList.innerHTML = '';
-            audioFiles.forEach((file, index) => {
-                const item = document.createElement('div');
-                item.className = 'audio-file-item' + (index === currentAudioIndex ? ' active' : '');
+async function playTrack(id) {
+    if (currentTrackId === id && audio.src) { togglePlayback(); return; }
+    const url = await urlFor(id);
+    if (!url) return;
+    currentTrackId = id;
+    audio.src = url;
+    audio.volume = +$('volume').value;
+    videoEl.pause();
+    try { await audio.play(); } catch (e) { showToast('Press play to start'); }
+    renderAudioList();
+    updateMini();
+}
 
-                const playIcon  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M8,5V19L19,12Z"/></svg>';
-                const pauseIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M6,19H10V5H6ZM14,19H18V5H14Z"/></svg>';
+function togglePlayback() {
+    if (!audio.src) return;
+    if (audio.paused) audio.play().catch(() => {});
+    else audio.pause();
+}
 
-                const nameDiv = document.createElement('div');
-                nameDiv.className = 'audio-filename';
-                nameDiv.textContent = '🎵 ' + file.name;
+function stopAudio() {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    currentTrackId = null;
+    updateMini();
+    renderAudioList();
+}
 
-                const controls = document.createElement('div');
-                controls.className = 'audio-controls';
+const fmt = s => isFinite(s)
+    ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+    : '0:00';
 
-                const playBtn = document.createElement('button');
-                playBtn.className = 'play-btn';
-                playBtn.dataset.index = index;
-                playBtn.innerHTML = (index === currentAudioIndex && isPlaying) ? pauseIcon : playIcon;
+function seekFrom(e, el) {
+    if (!audio.duration) return;
+    const r = el.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    audio.currentTime = ratio * audio.duration;
+}
 
-                const progWrap = document.createElement('div');
-                progWrap.className = 'audio-progress-container';
-                progWrap.dataset.index = index;
-                const progBar = document.createElement('div');
-                progBar.className = 'audio-progress-bar';
-                progBar.id = 'progress-' + index;
-                progBar.style.width = '0%';
-                progWrap.appendChild(progBar);
+function setPlayIcon(btn, state) {
+    if (btn.dataset.s === state) return;
+    btn.dataset.s = state;
+    btn.innerHTML = svg(state);
+}
 
-                const timeSpan = document.createElement('span');
-                timeSpan.className = 'audio-time';
-                timeSpan.id = 'time-' + index;
-                timeSpan.textContent = '0:00';
+function updateMini() {
+    const t = audioList.find(x => x.id === currentTrackId);
+    $('miniPlayer').classList.toggle('show', !!t);
+    $('np').classList.toggle('show', !!t);
+    if (!t) return;
+    const name = t.name.replace(/\.[^.]+$/, '');
+    const state = audio.paused ? 'play' : 'pause';
+    const pct = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+    $('miniTitle').textContent = name;
+    $('npTitle').textContent = name;
+    setPlayIcon($('miniPlay'), state);
+    setPlayIcon($('npPlay'), state);
+    $('miniProgress').style.width = pct + '%';
+    $('npProgress').style.width = pct + '%';
+    $('npTime').textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+}
 
-                controls.appendChild(playBtn);
-                controls.appendChild(progWrap);
-                controls.appendChild(timeSpan);
+audio.addEventListener('play', () => { videoEl.pause(); updateMini(); renderAudioList(); });
+audio.addEventListener('pause', () => { updateMini(); renderAudioList(); });
+audio.addEventListener('timeupdate', updateMini);
+audio.addEventListener('ended', () => {
+    const i = audioList.findIndex(t => t.id === currentTrackId);
+    if (i >= 0 && i < audioList.length - 1) playTrack(audioList[i + 1].id);
+    else { updateMini(); renderAudioList(); }
+});
+audio.addEventListener('error', () => { if (audio.src) showToast('Could not play this file'); });
 
-                const delBtn = document.createElement('button');
-                delBtn.className = 'btn danger';
-                delBtn.style.cssText = 'padding:2px 8px;font-size:0.7rem;';
-                delBtn.textContent = '✖';
-                delBtn.title = 'Remove';
-                delBtn.addEventListener('click', (e) => { e.stopPropagation(); removeAudioFile(index); });
+$('miniPlay').addEventListener('click', togglePlayback);
+$('miniClose').addEventListener('click', stopAudio);
+$('miniInfo').addEventListener('click', openDrawer);
+// stopPropagation keeps the click from reaching .mini-info, which opens the drawer
+$('miniBar').addEventListener('click', e => {
+    e.stopPropagation();
+    seekFrom(e, $('miniBar'));
+});
+$('npBar').addEventListener('click', e => seekFrom(e, $('npBar')));
+$('npPlay').addEventListener('click', togglePlayback);
+$('volume').addEventListener('input', e => { audio.volume = +e.target.value; });
 
-                item.appendChild(nameDiv);
-                item.appendChild(controls);
-                item.appendChild(delBtn);
+// ---------- Video ----------
+function setVideoMode(mode) {
+    const layer = $('videoLayer');
+    layer.className = mode === 'closed' ? 'video-layer' : 'video-layer open ' + mode;
+    $('videoBtn').classList.toggle('active', mode !== 'closed');
+    if (mode === 'closed') videoEl.pause();
+}
 
-                playBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePlay(index); });
-                item.addEventListener('click', () => selectAudio(index));
+function minimizeVideo() {
+    setVideoMode(currentVideoId ? 'mini' : 'closed');
+}
 
-                progWrap.addEventListener('click', (e) => {
-                    if (!audioElements[index]) return;
-                    const rect = progWrap.getBoundingClientRect();
-                    const percent = (e.clientX - rect.left) / rect.width;
-                    audioElements[index].currentTime = percent * audioElements[index].duration;
-                });
+function renderVideoGrid() {
+    const g = $('videoGrid');
+    g.innerHTML = '';
+    const add = document.createElement('button');
+    add.className = 'vcard add';
+    add.innerHTML = `${svg('upload')}<span>Upload videos</span>`;
+    add.addEventListener('click', () => $('videoInput').click());
+    g.appendChild(add);
+    videoList.forEach(v => {
+        const c = document.createElement('div');
+        c.className = 'vcard' + (v.id === currentVideoId ? ' active' : '');
+        c.innerHTML = `
+            <div class="vc-icon">${svg('movie')}</div>
+            <div class="vc-name"></div>
+            <button class="icon-btn sm danger vc-del" title="Delete" aria-label="Delete">${svg('trash')}</button>`;
+        c.querySelector('.vc-name').textContent = v.name;
+        c.addEventListener('click', () => playVideo(v.id));
+        c.querySelector('.vc-del').addEventListener('click', e => { e.stopPropagation(); removeItem(v.id, 'video'); });
+        g.appendChild(c);
+    });
+}
 
-                audioFileList.appendChild(item);
-            });
-        }
+async function playVideo(id) {
+    const url = await urlFor(id);
+    if (!url) return;
+    currentVideoId = id;
+    videoEl.src = url;
+    $('vwTitle').textContent = videoList.find(v => v.id === id)?.name || 'Video';
+    $('vwPlayerWrap').classList.remove('hidden');
+    setVideoMode('spot');
+    renderVideoGrid();
+    videoEl.play().catch(() => {});
+}
 
-        function selectAudio(index) {
-            if (currentAudioIndex >= 0 && audioElements[currentAudioIndex]) {
-                audioElements[currentAudioIndex].pause();
-            }
-            isPlaying = false;
-            currentAudioIndex = index;
-            const file = audioFiles[index];
-            if (!audioElements[index] && audioUrls[file.id]) {
-                audioElements[index] = new Audio(audioUrls[file.id]);
-                audioElements[index].volume = parseFloat(volumeSlider.value);
-                audioElements[index].addEventListener('timeupdate', updateProgress);
-                audioElements[index].addEventListener('ended', () => {
-                    isPlaying = false;
-                    renderAudioList();
-                });
-                audioElements[index].addEventListener('error', () => {
-                    showToast('Could not play: ' + file.name);
-                });
-            }
-            renderAudioList();
-        }
+videoEl.addEventListener('play', () => audio.pause());
+$('videoBtn').addEventListener('click', () => {
+    if ($('videoLayer').classList.contains('spot')) minimizeVideo();
+    else setVideoMode('spot');
+});
+$('vwMin').addEventListener('click', minimizeVideo);
+$('vwMax').addEventListener('click', () => setVideoMode('spot'));
+$('vwClose').addEventListener('click', () => setVideoMode('closed'));
+$('videoBackdrop').addEventListener('click', minimizeVideo);
+$('vwUpload').addEventListener('click', () => $('videoInput').click());
+$('videoInput').addEventListener('change', e => {
+    if (e.target.files.length) handleFiles(Array.from(e.target.files).filter(f => isVideo(f)));
+    e.target.value = '';
+});
 
-        function togglePlay(index) {
-            if (currentAudioIndex !== index) selectAudio(index);
-            const audio = audioElements[index];
-            if (!audio) return;
-            if (isPlaying) { audio.pause(); isPlaying = false; }
-            else {
-                // pause any other playing audio
-                audioElements.forEach(a => { if (a && a !== audio) a.pause(); });
-                audio.play().catch(err => console.error('Play error:', err));
-                isPlaying = true;
-            }
-            renderAudioList();
-        }
+// ---------- PDF ----------
+async function openPdfById(id) {
+    const rec = await dbGet(id);
+    if (!rec) { showToast('File not found'); return; }
+    setLoading(true);
+    try {
+        const buf = rec.data instanceof ArrayBuffer ? rec.data : await rec.data.arrayBuffer();
+        pdfDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+    } catch (err) {
+        console.error(err);
+        pdfDoc = null;
+        setLoading(false);
+        showToast('Could not open this PDF');
+        return;
+    }
+    setLoading(false);
+    currentPdfId = id;
+    totalPages = pdfDoc.numPages;
+    currentPage = 1;
+    $('pageTotal').textContent = '/ ' + totalPages;
+    $('pageInput').max = totalPages;
+    $('pageInput').value = 1;
+    $('brand').textContent = rec.name;
+    document.title = rec.name + ' — Reader';
+    $('empty').classList.add('hidden');
+    $('pdfView').classList.remove('hidden');
+    $('pdfTools').classList.remove('hidden');
+    $('closePdfBtn').classList.remove('hidden');
+    await fitScale();
+    renderPdf();
+    renderRecent();
+}
 
-        function updateProgress() {
-            if (currentAudioIndex < 0 || !audioElements[currentAudioIndex]) return;
-            const audio = audioElements[currentAudioIndex];
-            if (!audio.duration) return;
-            const progress = (audio.currentTime / audio.duration) * 100;
-            const bar = document.getElementById('progress-' + currentAudioIndex);
-            const time = document.getElementById('time-' + currentAudioIndex);
-            if (bar) bar.style.width = progress + '%';
-            if (time) {
-                const mins = Math.floor(audio.currentTime / 60);
-                const secs = Math.floor(audio.currentTime % 60);
-                time.textContent = mins + ':' + String(secs).padStart(2, '0');
-            }
-        }
+function closePdf() {
+    pdfDoc = null;
+    currentPdfId = null;
+    renderToken++;
+    $('pages').innerHTML = '';
+    $('pdfView').classList.add('hidden');
+    $('empty').classList.remove('hidden');
+    $('pdfTools').classList.add('hidden');
+    $('closePdfBtn').classList.add('hidden');
+    $('brand').textContent = 'Reader';
+    document.title = 'Reader';
+    renderRecent();
+}
 
-        // ---------- Drag & drop / file inputs ----------
-        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+// Pages shown together for the current view
+function spreadPages() {
+    if (!isTwoPage()) return [currentPage];
+    let start;
+    if (pageView === 'even') {
+        // 1-2, 3-4, 5-6
+        start = currentPage % 2 === 1 ? currentPage : currentPage - 1;
+    } else {
+        // Cover alone, then 2-3, 4-5, 6-7
+        if (currentPage === 1) return [1];
+        start = currentPage % 2 === 0 ? currentPage : currentPage - 1;
+    }
+    return [start, start + 1].filter(n => n >= 1 && n <= totalPages);
+}
 
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
-            pdfContainer.addEventListener(ev, preventDefaults);
-            audioDropZone.addEventListener(ev, preventDefaults);
-        });
+async function fitScale() {
+    const pages = await Promise.all(spreadPages().map(n => pdfDoc.getPage(n)));
+    const view = $('pdfView');
+    const gap = isTwoPage() ? 18 : 0;
+    const availW = view.clientWidth - 48 - gap * (pages.length - 1);
+    const availH = view.clientHeight - 48;
+    const sizes = pages.map(p => p.getViewport({ scale: 1 }));
+    const sumW = sizes.reduce((a, v) => a + v.width, 0);
+    const maxH = Math.max(...sizes.map(v => v.height));
+    setZoom(Math.min(availW / sumW, availH / maxH));
+}
 
-        pdfContainer.addEventListener('dragenter', () => pdfDropZone.classList.add('drag-over'));
-        pdfContainer.addEventListener('dragover',  () => pdfDropZone.classList.add('drag-over'));
-        pdfContainer.addEventListener('dragleave', (e) => {
-            if (!pdfContainer.contains(e.relatedTarget)) pdfDropZone.classList.remove('drag-over');
-        });
-        pdfContainer.addEventListener('drop', (e) => {
-            pdfDropZone.classList.remove('drag-over');
-            const file = Array.from(e.dataTransfer.files).find(isPdfFile);
-            if (file) loadPdfFromFile(file);
-            else showToast('Please drop a PDF file');
-        });
+function setZoom(s) {
+    scale = Math.min(3, Math.max(0.4, Math.round(s * 100) / 100));
+    $('zoomLabel').textContent = Math.round(scale * 100) + '%';
+}
 
-        audioDropZone.addEventListener('dragenter', () => audioDropZone.classList.add('drag-over'));
-        audioDropZone.addEventListener('dragover',  (e) => {
-            audioDropZone.classList.add('drag-over');
-            e.dataTransfer.dropEffect = 'copy';
-        });
-        audioDropZone.addEventListener('dragleave', () => audioDropZone.classList.remove('drag-over'));
-        audioDropZone.addEventListener('drop', (e) => {
-            audioDropZone.classList.remove('drag-over');
-            const files = Array.from(e.dataTransfer.files).filter(isAudioFile);
-            if (files.length) addAudioFiles(files);
-        });
-        audioDropZone.addEventListener('click', () => document.getElementById('audioInput').click());
+async function renderPdf() {
+    if (!pdfDoc) return;
+    const token = ++renderToken;
+    const pages = await Promise.all(spreadPages().map(n => pdfDoc.getPage(n)));
+    if (token !== renderToken) return;
 
-        document.getElementById('dropPdfBtn').addEventListener('click', () => document.getElementById('pdfInput').click());
-        closePdfBtn.addEventListener('click', closePdf);
+    const box = $('pages');
+    box.innerHTML = '';
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const jobs = pages.map(page => {
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(vp.width * dpr);
+        canvas.height = Math.floor(vp.height * dpr);
+        canvas.style.width = vp.width + 'px';
+        canvas.style.height = vp.height + 'px';
+        const wrap = document.createElement('div');
+        wrap.className = 'page';
+        wrap.appendChild(canvas);
+        box.appendChild(wrap);
+        return page.render({
+            canvasContext: canvas.getContext('2d'),
+            viewport: vp,
+            transform: [dpr, 0, 0, dpr, 0, 0]
+        }).promise;
+    });
+    await Promise.all(jobs);
+}
 
-        document.getElementById('pdfInput').addEventListener('change', (e) => {
-            if (e.target.files.length && isPdfFile(e.target.files[0])) loadPdfFromFile(e.target.files[0]);
-            e.target.value = '';
-        });
-        document.getElementById('audioInput').addEventListener('change', (e) => {
-            if (e.target.files.length) addAudioFiles(Array.from(e.target.files).filter(isAudioFile));
-            e.target.value = '';
-        });
+function goToPage(p) {
+    if (!pdfDoc || p < 1 || p > totalPages) return;
+    currentPage = p;
+    $('pageInput').value = p;
+    renderPdf();
+    $('pdfView').scrollTop = 0;
+}
 
-        // Header controls
-        document.getElementById('prevPage').addEventListener('click', () => goToPage(currentPage - 1));
-        document.getElementById('nextPage').addEventListener('click', () => goToPage(currentPage + 1));
-        pageNumberInput.addEventListener('change', (e) => {
-            const p = parseInt(e.target.value);
-            if (pdfDoc && p >= 1 && p <= totalPages) goToPage(p);
-            else e.target.value = currentPage;
-        });
-        document.getElementById('zoomIn').addEventListener('click', () => changeZoom(0.25));
-        document.getElementById('zoomOut').addEventListener('click', () => changeZoom(-0.25));
-        viewModeBtn.addEventListener('click', () => {
-            twoPageMode = !twoPageMode;
-            viewModeBtn.textContent = twoPageMode ? '1 Page' : '2 Pages';
-            renderPdf();
-        });
-        document.getElementById('toggleAudio').addEventListener('click', () => audioPanel.classList.toggle('collapsed'));
-        volumeSlider.addEventListener('input', (e) => {
-            if (audioElements[currentAudioIndex]) audioElements[currentAudioIndex].volume = parseFloat(e.target.value);
-        });
+function step(dir) {
+    if (!pdfDoc) return;
+    const cur = spreadPages()[0];
+    let t;
+    if (!isTwoPage()) {
+        t = cur + dir;
+    } else if (dir > 0) {
+        // Uneven view moves from the cover (1) to the first pair (2-3)
+        t = cur === 1 && pageView === 'uneven' ? 2 : cur + 2;
+    } else {
+        t = Math.max(1, cur - 2);
+    }
+    if (t !== cur && t >= 1 && t <= totalPages) goToPage(t);
+}
 
-        document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') return;
-            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goToPage(currentPage + 1);
-            if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goToPage(currentPage - 1);
-            if (e.key === ' ') { e.preventDefault(); if (currentAudioIndex >= 0) togglePlay(currentAudioIndex); }
-        });
+$('viewMode').addEventListener('change', async e => {
+    if (!pdfDoc) return;
+    pageView = e.target.value;
+    // Snap to the start of the spread that contains the current page
+    currentPage = spreadPages()[0];
+    $('pageInput').value = currentPage;
+    await fitScale();
+    renderPdf();
+});
 
-        // ---------- Init ----------
-        (async function init() {
-            try {
-                db = await openDB();
-                await renderRecentList();
-                await loadAudioListFromDB();
-            } catch (err) {
-                console.error('IndexedDB unavailable, files will not persist:', err);
-                showToast('Storage unavailable; files will work for this session only');
-            }
-        })();
-    </script>
+// ---------- Recent PDFs ----------
+function renderRecent() {
+    const l = $('recentList');
+    l.innerHTML = '';
+    if (!recentPdfs.length) {
+        l.innerHTML = '<div class="empty-text">Opened PDFs appear here.</div>';
+        return;
+    }
+    recentPdfs.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'row' + (p.id === currentPdfId ? ' active' : '');
+        row.innerHTML = `
+            <div class="thumb">${svg('doc')}</div>
+            <div class="meta"><div class="name"></div><div class="sub">PDF</div></div>
+            <button class="icon-btn sm danger" title="Remove" aria-label="Remove">${svg('trash')}</button>`;
+        row.querySelector('.name').textContent = p.name;
+        row.addEventListener('click', () => { closeDrawer(); openPdfById(p.id); });
+        row.querySelector('button').addEventListener('click', e => { e.stopPropagation(); removeItem(p.id, 'pdf'); });
+        l.appendChild(row);
+    });
+}
+
+// ---------- Drawer ----------
+function openDrawer() { $('drawer').classList.add('open'); $('scrim').classList.add('show'); }
+function closeDrawer() { $('drawer').classList.remove('open'); $('scrim').classList.remove('show'); }
+$('menuBtn').addEventListener('click', () => $('drawer').classList.contains('open') ? closeDrawer() : openDrawer());
+$('drawerClose').addEventListener('click', closeDrawer);
+$('scrim').addEventListener('click', closeDrawer);
+
+const audioDrop = $('audioDrop');
+audioDrop.addEventListener('click', () => $('audioInput').click());
+audioDrop.addEventListener('dragover', e => { e.preventDefault(); audioDrop.classList.add('drag'); });
+audioDrop.addEventListener('dragleave', () => audioDrop.classList.remove('drag'));
+audioDrop.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    audioDrop.classList.remove('drag');
+    dragDepth = 0;
+    document.body.classList.remove('dragging');
+    handleFiles(Array.from(e.dataTransfer.files));
+});
+$('audioInput').addEventListener('change', e => {
+    if (e.target.files.length) handleFiles(Array.from(e.target.files));
+    e.target.value = '';
+});
+
+// ---------- Global drag & drop ----------
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+window.addEventListener('dragenter', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    document.body.classList.add('dragging');
+});
+window.addEventListener('dragleave', e => {
+    if (!hasFiles(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) document.body.classList.remove('dragging');
+});
+window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('drop', e => {
+    dragDepth = 0;
+    document.body.classList.remove('dragging');
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    handleFiles(Array.from(e.dataTransfer.files));
+});
+
+// ---------- Buttons ----------
+$('openPdfBtn').addEventListener('click', () => $('pdfInput').click());
+$('emptyOpen').addEventListener('click', () => $('pdfInput').click());
+$('pdfInput').addEventListener('change', e => {
+    if (e.target.files.length) handleFiles(Array.from(e.target.files).filter(isPdf));
+    e.target.value = '';
+});
+$('closePdfBtn').addEventListener('click', closePdf);
+$('prevPage').addEventListener('click', () => step(-1));
+$('nextPage').addEventListener('click', () => step(1));
+$('pageInput').addEventListener('change', e => {
+    const p = parseInt(e.target.value, 10);
+    if (pdfDoc && p >= 1 && p <= totalPages) goToPage(p);
+    else e.target.value = currentPage;
+});
+$('zoomIn').addEventListener('click', () => { if (pdfDoc) { setZoom(scale + 0.1); renderPdf(); } });
+$('zoomOut').addEventListener('click', () => { if (pdfDoc) { setZoom(scale - 0.1); renderPdf(); } });
+$('zoomLabel').addEventListener('click', () => { if (pdfDoc) { fitScale().then(renderPdf); } });
+
+// ---------- Keyboard ----------
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        if ($('drawer').classList.contains('open')) closeDrawer();
+        else if ($('videoLayer').classList.contains('spot')) minimizeVideo();
+        return;
+    }
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    if (e.key === ' ') {
+        e.preventDefault();
+        if ($('videoLayer').classList.contains('spot') && currentVideoId) {
+            videoEl.paused ? videoEl.play().catch(() => {}) : videoEl.pause();
+        } else togglePlayback();
+        return;
+    }
+    if (!pdfDoc) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') step(1);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') step(-1);
+});
+
+// ---------- Init ----------
+(async function init() {
+    try {
+        db = await openDB();
+        await refreshLibrary();
+    } catch (err) {
+        console.error('IndexedDB unavailable:', err);
+        showToast('Storage unavailable. Files last only this session.');
+    }
+})();
+</script>
 </body>
 </html>
