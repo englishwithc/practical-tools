@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teaching Clock</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body, body * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+body input, body select {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #f1f5f9;
+  color: #0f172a;
+  overflow: hidden;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+}
+.brand { font-weight: 700; font-size: 16px; white-space: nowrap; }
+.brand span { color: #64748b; font-weight: 500; }
+.hint { color: #94a3b8; font-size: 12px; white-space: nowrap; }
+
+.stepper { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.nav {
+  width: 36px; height: 36px; border-radius: 10px;
+  border: 1px solid #e2e8f0; background: #fff;
+  font-size: 18px; color: #334155; cursor: pointer;
+}
+.nav:hover { background: #f8fafc; }
+.dots { display: flex; gap: 6px; align-items: center; }
+.dot {
+  width: 8px; height: 8px; border-radius: 999px;
+  border: 0; padding: 0; background: #cbd5e1; cursor: pointer;
+  transition: width .2s, background .2s;
+}
+.dot.on { width: 22px; background: #4f46e5; }
+.step-name {
+  font-weight: 600; font-size: 15px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 420px; text-align: center;
+}
+
+main {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 1fr 360px;
+  gap: 16px; padding: 16px;
+}
+
+.stage {
+  position: relative;
+  min-height: 0;
+  border-radius: 24px;
+  border: 1px solid #e2e8f0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px; padding: 20px;
+  background: #ffffff;
+  transition: background .6s, color .6s;
+}
+.stage[data-sky="am"] { background: linear-gradient(180deg, #9ad8ff 0%, #e9f7ff 100%); }
+.stage[data-sky="pm"] { background: linear-gradient(180deg, #0b1030 0%, #2c3170 100%); color: #e6e9ff; }
+
+#clock {
+  width: min(56vh, 100%);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  display: block;
+  touch-action: none;
+  cursor: pointer;
+  filter: drop-shadow(0 10px 30px rgba(15, 23, 42, .15));
+}
+
+.phrase {
+  font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+  font-weight: 700;
+  min-height: 1.4em;
+  text-align: center;
+}
+
+.digital {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 6px 22px;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #86efac;
+}
+
+.badge {
+  position: absolute; top: 18px; right: 18px;
+  padding: 8px 18px; border-radius: 999px;
+  background: #0f172a; color: #fff;
+  font-weight: 800; font-size: 20px; letter-spacing: 1px;
+}
+.stage[data-sky="pm"] .badge { background: #fbbf24; color: #1e1b4b; }
+
+/* ---------- On-stage dock ---------- */
+.dock {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; width: 100%; max-width: 780px;
+}
+.toolbar {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+}
+.tool {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  min-width: 84px; padding: 8px 10px;
+  border-radius: 14px; border: 1px solid #cbd5e1;
+  background: #fff; color: #0f172a;
+  font-family: inherit; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.tool:hover { background: #f8fafc; }
+.tool.on { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.tool.on:hover { background: #4338ca; }
+.tool .ico { font-size: 22px; line-height: 1; }
+.tool .lbl { font-size: 12px; font-weight: 600; white-space: nowrap; }
+
+.settime {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 10px; padding: 8px 14px; border-radius: 14px;
+  background: #fff; border: 1px solid #cbd5e1; color: #0f172a; font-size: 14px;
+}
+.settime .grp { font-size: 12px; font-weight: 600; color: #475569; }
+.settime input[type="range"] { width: 180px; flex: none; }
+.settime .val { width: 28px; }
+
+/* ---------- Side panel ---------- */
+.panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 6px 0;
+}
+
+details.section { padding: 0 18px; border-bottom: 1px solid #f1f5f9; }
+details.section:last-child { border-bottom: 0; }
+details summary {
+  list-style: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 0; font-weight: 650; font-size: 15px;
+}
+details summary::-webkit-details-marker { display: none; }
+details summary::after {
+  content: ""; width: 8px; height: 8px;
+  border-right: 2px solid #64748b; border-bottom: 2px solid #64748b;
+  transform: rotate(45deg); transition: transform .2s; margin-right: 4px;
+}
+details[open] summary::after { transform: rotate(-135deg); }
+.sec-body { padding: 0 0 16px; }
+
+.row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 9px 0; cursor: pointer;
+}
+.row > span { font-size: 14px; font-weight: 550; }
+.row small { display: block; font-size: 12px; color: #64748b; font-weight: 400; margin-top: 2px; }
+
+.switch {
+  appearance: none; -webkit-appearance: none;
+  width: 40px; height: 22px; border-radius: 999px;
+  background: #cbd5e1; position: relative; cursor: pointer;
+  transition: background .2s; flex-shrink: 0; margin: 0;
+}
+.switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s;
+}
+.switch:checked { background: #4f46e5; }
+.switch:checked::after { transform: translateX(18px); }
+
+.sw {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 50%; margin-right: 8px; vertical-align: middle;
+}
+
+.group-title {
+  font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+  color: #94a3b8; font-weight: 700; margin: 14px 0 4px;
+}
+
+.note { font-size: 12px; color: #64748b; margin: 8px 0 0; line-height: 1.5; }
+
+.field { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; }
+.field > label { width: 60px; color: #475569; }
+select {
+  padding: 7px 10px; border-radius: 8px; border: 1px solid #cbd5e1;
+  font-size: 14px; background: #fff;
+}
+input[type="range"] { flex: 1; accent-color: #4f46e5; }
+.val { font-variant-numeric: tabular-nums; font-weight: 700; width: 28px; text-align: right; }
+
+.btn {
+  padding: 9px 14px; border-radius: 10px; border: 1px solid #cbd5e1;
+  background: #fff; cursor: pointer; font-weight: 600; font-size: 14px;
+}
+.btn:hover { background: #f8fafc; }
+.btn.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.btn.primary:hover { background: #4338ca; }
+.btn.good { background: #16a34a; border-color: #16a34a; color: #fff; }
+.btn.good:hover { background: #15803d; }
+
+.game-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.score {
+  font-size: 15px; font-weight: 700; margin: 14px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  body { height: auto; overflow: auto; }
+  main { grid-template-columns: 1fr; }
+  .stage { min-height: 70vh; }
+  .panel { overflow: visible; }
+  .step-name { max-width: 200px; }
+  .hint { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Teaching Clock <span>· lesson flow</span></div>
+  <div class="stepper">
+    <button class="nav" id="prevBtn" aria-label="Previous step">←</button>
+    <div class="dots" id="dots"></div>
+    <div class="step-name" id="stepName"></div>
+    <button class="nav" id="nextBtn" aria-label="Next step">→</button>
+  </div>
+  <div class="hint">← → to move · N new time in game</div>
+</header>
+
+<main>
+  <section class="stage" id="stage" data-sky="off">
+    <div class="badge" id="badge" hidden>AM</div>
+    <svg id="clock" viewBox="0 0 400 400" role="img" aria-label="Analog clock"></svg>
+    <div class="phrase" id="phrase"></div>
+    <div class="digital" id="digital" hidden></div>
+
+    <div class="dock">
+      <div class="toolbar">
+        <button class="tool" data-key="hourHand" title="Show or hide the hour hand">
+          <span class="ico">🕐</span><span class="lbl">Hour hand</span>
+        </button>
+        <button class="tool" data-key="minuteHand" title="Show or hide the minute hand">
+          <span class="ico">⏱️</span><span class="lbl">Minute hand</span>
+        </button>
+        <button class="tool" data-key="numbers" title="Show or hide the numbers 1 to 12">
+          <span class="ico">🔢</span><span class="lbl">Numbers</span>
+        </button>
+        <button class="tool" data-key="snap" title="Dragging the minute hand snaps to 5 minutes">
+          <span class="ico">🧲</span><span class="lbl">Snap 5 min</span>
+        </button>
+        <button class="tool" data-key="live" title="Keeps following the real clock every second">
+          <span class="ico">🔁</span><span class="lbl">Live clock</span>
+        </button>
+        <button class="tool" id="btnNow" title="Set the clock to the real time once">
+          <span class="ico">🕰️</span><span class="lbl">Real time</span>
+        </button>
+      </div>
+
+      <div class="settime">
+        <span class="grp">Hour</span>
+        <select id="selHour" aria-label="Hour"></select>
+        <select id="selAmPm" aria-label="AM or PM"><option>AM</option><option>PM</option></select>
+        <span class="grp">Minute</span>
+        <input type="range" id="rngMinute" min="0" max="59" value="0" aria-label="Minute">
+        <span class="val" id="valMinute">00</span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel">
+
+    <details class="section" id="s-quarter">
+      <summary>Quarter past, half past, quarter to</summary>
+      <div class="sec-body">
+        <label class="row"><span>Quarter marks<small>Red ticks at 12, 3, 6 and 9</small></span><input class="switch" type="checkbox" data-key="quarter"></label>
+        <label class="row"><span>Time phrase<small>Shows the words under the clock</small></span><input class="switch" type="checkbox" data-key="phrase"></label>
+      </div>
+    </details>
+
+    <details class="section" id="s-halves">
+      <summary>The two halves</summary>
+      <div class="sec-body">
+        <label class="row"><span><i class="sw" style="background:#14b8a6"></i>Past half<small>Right side, minutes 0–30</small></span><input class="switch sw-teal" type="checkbox" data-key="halfPast"></label>
+        <label class="row"><span><i class="sw" style="background:#f97316"></i>To half<small>Left side, minutes 30–60</small></span><input class="switch sw-orange" type="checkbox" data-key="halfTo"></label>
+        <p class="note">Turn on both to show the two halves glowing together.</p>
+      </div>
+    </details>
+
+    <details class="section" id="s-keys">
+      <summary>Key minutes: past and to</summary>
+      <div class="sec-body">
+        <label class="row"><span><i class="sw" style="background:#14b8a6"></i>Past side<small>5 · 10 · 20 · 25 past</small></span><input class="switch sw-teal" type="checkbox" data-key="keyPast"></label>
+        <label class="row"><span><i class="sw" style="background:#f97316"></i>To side<small>25 · 20 · 10 · 5 to</small></span><input class="switch sw-orange" type="checkbox" data-key="keyTo"></label>
+      </div>
+    </details>
+
+    <details class="section" id="s-count5">
+      <summary>Counting by fives</summary>
+      <div class="sec-body">
+        <label class="row"><span>5-minute numbers<small>5, 10 … 60 on the inner ring</small></span><input class="switch" type="checkbox" data-key="nums5"></label>
+        <label class="row"><span>5-minute ticks<small>Longer ticks every five minutes</small></span><input class="switch" type="checkbox" data-key="ticks5"></label>
+      </div>
+    </details>
+
+    <details class="section" id="s-minutes">
+      <summary>Every minute</summary>
+      <div class="sec-body">
+        <label class="row"><span>All 60 ticks<small>Every single minute mark</small></span><input class="switch" type="checkbox" data-key="ticks"></label>
+        <label class="row"><span>1–60 counter<small>Counts all the way around the clock</small></span><input class="switch" type="checkbox" data-key="counter"></label>
+        <label class="row"><span>Split into halves<small>Right side 1→30, left side 1→29, both starting at the top. Replaces the 1–60 counter</small></span><input class="switch" type="checkbox" data-key="counterBack"></label>
+      </div>
+    </details>
+
+    <details class="section" id="s-ampm">
+      <summary>AM &amp; PM</summary>
+      <div class="sec-body">
+        <label class="row"><span>AM / PM badge<small>Big label in the corner</small></span><input class="switch" type="checkbox" data-key="ampm"></label>
+        <label class="row"><span>Day and night sky<small>Light sky for AM, night sky for PM</small></span><input class="switch" type="checkbox" data-key="sky"></label>
+        <label class="row"><span>Digital readout<small>Shows the time in digits</small></span><input class="switch" type="checkbox" data-key="digital"></label>
+      </div>
+    </details>
+
+    <details class="section" id="s-24h">
+      <summary>24-hour time</summary>
+      <div class="sec-body">
+        <label class="row"><span>24-hour format<small>Digital readout shows 13:25 style</small></span><input class="switch" type="checkbox" data-key="use24"></label>
+        <label class="row"><span>24-hour inner ring<small>13 to 24 around the inside</small></span><input class="switch" type="checkbox" data-key="inner24"></label>
+      </div>
+    </details>
+
+    <details class="section" id="s-game">
+      <summary>Practice game</summary>
+      <div class="sec-body">
+        <p class="note">Give the student a random time and ask them to read it. Open any section above to turn on hints while they practise.</p>
+        <div class="field">
+          <label for="selDiff">Level</label>
+          <select id="selDiff">
+            <option value="hour">On the hour</option>
+            <option value="quarter">Quarter hours</option>
+            <option value="five">Every 5 minutes</option>
+            <option value="any">Any minute</option>
+          </select>
+        </div>
+        <div class="game-btns">
+          <button class="btn primary" id="btnNew">New time</button>
+          <button class="btn" id="btnReveal">Show answer</button>
+        </div>
+        <div class="game-btns">
+          <button class="btn good" id="btnRight">Got it ✓</button>
+          <button class="btn" id="btnWrong">Not yet ✗</button>
+        </div>
+        <p class="score" id="score">Score: 0 of 0</p>
+        <p class="note">Press N for a new time.</p>
+      </div>
+    </details>
+
+  </aside>
+</main>
+
+<script>
+// SECTION: STATE
+const ALL_KEYS = [
+  'hourHand', 'minuteHand', 'numbers', 'quarter', 'phrase',
+  'halfPast', 'halfTo', 'keyPast', 'keyTo', 'ticks5', 'nums5',
+  'ticks', 'counter', 'counterBack', 'ampm', 'sky', 'digital',
+  'use24', 'inner24'
+];
+
+const state = {
+  hour: 12, minute: 0, live: false, snap: true,
+  revealed: false,
+  score: { correct: 0, attempts: 0 }
+};
+
+// SECTION: LESSON STEPS (your teaching order, then the game)
+const STEPS = [
+  { name: 'Blank clock', open: null, time: [12, 0],
+    on: ['numbers'] },
+  { name: 'Quarter past, half past, quarter to', open: 's-quarter', time: [3, 15],
+    on: ['hourHand', 'minuteHand', 'numbers', 'quarter', 'phrase'] },
+  { name: 'The two halves', open: 's-halves', time: [3, 20],
+    on: ['hourHand', 'minuteHand', 'numbers', 'phrase', 'halfPast', 'halfTo'] },
+  { name: 'Key minutes past the hour', open: 's-keys', time: [3, 10],
+    on: ['hourHand', 'minuteHand', 'numbers', 'phrase', 'halfPast', 'keyPast'] },
+  { name: 'Key minutes to the hour', open: 's-keys', time: [3, 35],
+    on: ['hourHand', 'minuteHand', 'numbers', 'phrase', 'halfTo', 'keyTo'] },
+  { name: 'Counting by fives', open: 's-count5', time: [3, 25],
+    on: ['hourHand', 'minuteHand', 'numbers', 'nums5', 'ticks5'] },
+  { name: 'Every single minute', open: 's-minutes', time: [3, 37],
+    on: ['hourHand', 'minuteHand', 'numbers', 'ticks', 'counter'] },
+  { name: 'AM and PM', open: 's-ampm', time: [9, 30],
+    on: ['hourHand', 'minuteHand', 'numbers', 'ampm', 'sky', 'digital'] },
+  { name: '24-hour time', open: 's-24h', time: [21, 30],
+    on: ['hourHand', 'minuteHand', 'numbers', 'use24', 'inner24', 'digital'] },
+  { name: 'Practice game', open: 's-game', time: [12, 0], game: true,
+    on: ['hourHand', 'minuteHand', 'numbers'] }
+];
+let cur = 0;
+
+// SECTION: CONSTANTS & HELPERS
+const W = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+  'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
+  'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
+  'twenty-one', 'twenty-two', 'twenty-three', 'twenty-four',
+  'twenty-five', 'twenty-six', 'twenty-seven', 'twenty-eight', 'twenty-nine'];
+
+const C = 200;
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, '0');
+const f = n => n.toFixed(1);
+const rand = n => Math.floor(Math.random() * n);
+
+// Angle in degrees, clockwise from 12 o'clock
+function P(deg, r) {
+  const a = deg * Math.PI / 180;
+  return [C + r * Math.sin(a), C - r * Math.cos(a)];
+}
+
+function ln(d, r1, r2, color, w) {
+  const [x1, y1] = P(d, r1);
+  const [x2, y2] = P(d, r2);
+  return `<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" ` +
+    `stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+}
+
+function txt(d, r, str, size, weight, fill) {
+  const [x, y] = P(d, r);
+  return `<text x="${f(x)}" y="${f(y)}" text-anchor="middle" ` +
+    `dominant-baseline="central" font-size="${size}" font-weight="${weight}" ` +
+    `fill="${fill}">${str}</text>`;
+}
+
+function bubble(d, label, color) {
+  const [x, y] = P(d, 150);
+  return `<circle cx="${f(x)}" cy="${f(y)}" r="12" fill="${color}"/>` +
+    txt(d, 150, label, 12, 700, '#fff');
+}
+
+function sector(a, b, color) {
+  const [x1, y1] = P(a, 176);
+  const [x2, y2] = P(b, 176);
+  return `<path d="M${C} ${C} L${f(x1)} ${f(y1)} A176 176 0 0 1 ${f(x2)} ${f(y2)} Z" ` +
+    `fill="${color}" fill-opacity="0.45" filter="url(#glow)"/>`;
+}
+
+function phraseFor(h, m) {
+  const h12 = h % 12 || 12;
+  const next = (h + 1) % 12 || 12;
+  let s;
+  if (m === 0) s = `${h12} o'clock`;
+  else if (m === 15) s = `quarter past ${h12}`;
+  else if (m === 30) s = `half past ${h12}`;
+  else if (m === 45) s = `quarter to ${next}`;
+  else if (m < 30) s = `${W[m]} past ${h12}`;
+  else s = `${W[60 - m]} to ${next}`;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function digitalText() {
+  if (state.use24) return `${pad(state.hour)}:${pad(state.minute)}`;
+  return `${state.hour % 12 || 12}:${pad(state.minute)} ${state.hour < 12 ? 'AM' : 'PM'}`;
+}
+
+// SECTION: DRAW CLOCK
+function drawClock() {
+  const s = state;
+  const hA = ((s.hour % 12) + s.minute / 60) * 30;
+  const mA = s.minute * 6;
+  let g = `<defs>
+    <radialGradient id="face" cx="50%" cy="45%" r="60%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f1f5f9"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>`;
+
+  g += `<circle cx="200" cy="200" r="190" fill="url(#face)" stroke="#cbd5e1" stroke-width="4"/>`;
+
+  // Two halves
+  if (s.halfPast) g += sector(0, 180, '#14b8a6');
+  if (s.halfTo) g += sector(180, 360, '#f97316');
+
+  // Ticks
+  for (let i = 0; i < 60; i++) {
+    const d = i * 6;
+    const five = i % 5 === 0;
+    if (five && s.ticks5) g += ln(d, 174, 186, '#334155', 3);
+    else if (!five && s.ticks) g += ln(d, 180, 186, '#94a3b8', 1.5);
+  }
+
+  // Quarter marks
+  if (s.quarter) [0, 90, 180, 270].forEach(d => { g += ln(d, 172, 186, '#ef4444', 6); });
+
+  // Hour numbers
+  if (s.numbers) {
+    for (let h = 1; h <= 12; h++) g += txt(h * 30, 112, h, 26, 700, '#0f172a');
+  }
+
+  // 24-hour inner ring
+  if (s.inner24) {
+    for (let h = 13; h <= 24; h++) g += txt((h % 12) * 30, 58, h, 11, 600, '#7c3aed');
+  }
+
+  // 5-minute numbers
+  if (s.nums5) {
+    for (let k = 5; k <= 60; k += 5) g += txt(k * 6, 84, k, 13, 600, '#64748b');
+  }
+
+  // Outer ring: split halves OR full 1-60 counter
+  if (s.counterBack) {
+    for (let k = 1; k <= 30; k++) g += txt(k * 6, 165, k, 9, 700, '#0f766e');
+    for (let k = 1; k <= 29; k++) g += txt(360 - k * 6, 165, k, 9, 700, '#c2410c');
+  } else if (s.counter) {
+    for (let p = 0; p < 60; p++) {
+      const v = p === 0 ? 60 : p;
+      g += txt(p * 6, 165, v, 8, 500, '#94a3b8');
+    }
+  }
+
+  // Key minute bubbles
+  if (s.keyPast) [5, 10, 20, 25].forEach(m => { g += bubble(m * 6, m, '#14b8a6'); });
+  if (s.keyTo) [25, 20, 10, 5].forEach(m => { g += bubble((60 - m) * 6, m, '#f97316'); });
+
+  // Hands
+  if (s.hourHand) g += ln(hA, 0, 80, '#1e293b', 10);
+  if (s.minuteHand) g += ln(mA, 0, 128, '#4f46e5', 6);
+  if (s.hourHand || s.minuteHand) {
+    g += `<circle cx="200" cy="200" r="7" fill="#4f46e5"/>`;
+  }
+
+  $('clock').innerHTML = g;
+}
+
+// SECTION: DRAW STAGE (badge, phrase, digital, sky)
+function drawStage() {
+  const stage = $('stage');
+  const rev = state.revealed;
+  stage.dataset.sky = state.sky ? (state.hour < 12 ? 'am' : 'pm') : 'off';
+
+  const badge = $('badge');
+  badge.textContent = state.hour < 12 ? 'AM' : 'PM';
+  badge.hidden = !(state.ampm || rev);
+
+  $('phrase').textContent = (state.phrase || rev) ? phraseFor(state.hour, state.minute) : '';
+
+  const dg = $('digital');
+  dg.hidden = !(state.digital || rev);
+  dg.textContent = digitalText();
+}
+
+// SECTION: SCORE
+function updateScore() {
+  const { correct, attempts } = state.score;
+  $('score').textContent = `Score: ${correct} of ${attempts}`;
+}
+
+// SECTION: SYNC CONTROLS WITH STATE
+function syncUI() {
+  // Side-panel checkboxes
+  document.querySelectorAll('input[data-key]').forEach(cb => {
+    cb.checked = !!state[cb.dataset.key];
+  });
+  // On-stage toggle buttons
+  document.querySelectorAll('button[data-key]').forEach(b => {
+    const on = !!state[b.dataset.key];
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  $('selHour').value = state.hour % 12 || 12;
+  $('selAmPm').value = state.hour < 12 ? 'AM' : 'PM';
+  $('rngMinute').value = state.minute;
+  $('valMinute').textContent = pad(state.minute);
+}
+
+function renderAll() {
+  drawClock();
+  drawStage();
+  syncUI();
+  updateScore();
+}
+
+// SECTION: LIVE CLOCK
+function tick() {
+  const now = new Date();
+  state.hour = now.getHours();
+  state.minute = now.getMinutes();
+  renderAll();
+}
+setInterval(() => { if (state.live) tick(); }, 1000);
+
+// SECTION: PRACTICE GAME
+function newQuestion() {
+  const level = $('selDiff').value;
+  const hour = rand(24);
+  let minute;
+  if (level === 'hour') minute = 0;
+  else if (level === 'quarter') minute = [0, 15, 30, 45][rand(4)];
+  else if (level === 'five') minute = rand(12) * 5;
+  else minute = rand(60);
+  Object.assign(state, { hour, minute, revealed: false, live: false });
+  renderAll();
+}
+
+function answerRight() {
+  state.score.attempts++;
+  state.score.correct++;
+  newQuestion();
+}
+
+function answerWrong() {
+  state.score.attempts++;
+  state.revealed = true;
+  renderAll();
+}
+
+function revealAnswer() {
+  state.revealed = true;
+  renderAll();
+}
+
+// SECTION: STEPS
+function renderHeader() {
+  $('stepName').textContent = `${cur + 1} of ${STEPS.length} · ${STEPS[cur].name}`;
+  Array.from($('dots').children).forEach((d, i) => d.classList.toggle('on', i === cur));
+}
+
+function goStep(i) {
+  cur = (i + STEPS.length) % STEPS.length;
+  const st = STEPS[cur];
+  ALL_KEYS.forEach(k => { state[k] = st.on.includes(k); });
+  state.hour = st.time[0];
+  state.minute = st.time[1];
+  state.live = false;
+  state.revealed = false;
+  document.querySelectorAll('details.section').forEach(d => { d.open = d.id === st.open; });
+  renderHeader();
+  if (st.game) {
+    state.score = { correct: 0, attempts: 0 };
+    newQuestion();
+  } else {
+    renderAll();
+  }
+}
+
+// SECTION: DRAG ON CLOCK
+// Time is tracked as one running value, so the minute hand can keep turning
+// past 12 and carry into the next hour, and the hour hand moves with it.
+let dragging = null;
+let dragLast = 0;      // last pointer angle (degrees)
+let dragTotal = 0;     // total unwrapped degrees turned during this drag
+let dragBase = 0;      // minutes since midnight at the start of the drag
+const svg = $('clock');
+
+function svgPoint(e) {
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function angleOf(p) {
+  let deg = Math.atan2(p.x - C, -(p.y - C)) * 180 / Math.PI;
+  if (deg < 0) deg += 360;
+  return deg;
+}
+
+// Set hour and minute from a total number of minutes, wrapping over a day
+function setFromTotalMinutes(t) {
+  t = ((Math.round(t) % 1440) + 1440) % 1440;
+  state.hour = Math.floor(t / 60);
+  state.minute = t % 60;
+}
+
+function startDrag(p) {
+  const deg = angleOf(p);
+  state.live = false;
+  state.revealed = false;
+  if (dragging === 'minute') {
+    // Jump the minute hand to the pointer, staying in the current hour
+    const m = state.snap ? (Math.round(deg / 30) * 5) % 60 : Math.round(deg / 6) % 60;
+    setFromTotalMinutes(Math.floor(state.hour / 1) * 60 + m);
+  } else {
+    const h = Math.round(deg / 30) % 12;
+    state.hour = (state.hour >= 12 ? 12 : 0) + h;
+  }
+  dragLast = deg;
+  dragTotal = 0;
+  dragBase = state.hour * 60 + state.minute;
+  renderAll();
+}
+
+function moveDrag(p) {
+  const deg = angleOf(p);
+  let d = deg - dragLast;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;   // handles crossing 12 o'clock in either direction
+  dragLast = deg;
+  dragTotal += d;
+  state.live = false;
+
+  if (dragging === 'minute') {
+    let t = dragBase + dragTotal / 6;
+    if (state.snap) t = Math.round(t / 5) * 5;
+    setFromTotalMinutes(t);
+  } else {
+    const hoursMoved = Math.round(dragTotal / 30);
+    state.hour = (((dragBase - state.minute) / 60 + hoursMoved) % 24 + 24) % 24;
+  }
+  renderAll();
+}
+
+svg.addEventListener('pointerdown', e => {
+  const p = svgPoint(e);
+  const dist = Math.hypot(p.x - C, p.y - C);
+  if (dist > 195) return;
+  e.preventDefault();
+  dragging = (dist < 70 && state.hourHand) ? 'hour' : 'minute';
+  svg.setPointerCapture(e.pointerId);
+  startDrag(p);
+});
+svg.addEventListener('pointermove', e => {
+  if (dragging) moveDrag(svgPoint(e));
+});
+const endDrag = () => { dragging = null; };
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointercancel', endDrag);
+
+// SECTION: INIT
+function setupControls() {
+  const selHour = $('selHour');
+  for (let i = 1; i <= 12; i++) {
+    const o = document.createElement('option');
+    o.value = i;
+    o.textContent = i;
+    selHour.appendChild(o);
+  }
+
+  // Side-panel checkboxes
+  document.querySelectorAll('input[data-key]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      state[cb.dataset.key] = cb.checked;
+      if (cb.dataset.key === 'live' && cb.checked) tick();
+      renderAll();
+    });
+  });
+
+  // On-stage toggle buttons
+  document.querySelectorAll('button[data-key]').forEach(b => {
+    b.addEventListener('click', () => {
+      const k = b.dataset.key;
+      state[k] = !state[k];
+      if (k === 'live' && state.live) tick();
+      renderAll();
+    });
+  });
+
+  const setHourFromControls = () => {
+    state.live = false;
+    state.revealed = false;
+    state.hour = (+selHour.value % 12) + ($('selAmPm').value === 'PM' ? 12 : 0);
+    renderAll();
+  };
+  selHour.addEventListener('change', setHourFromControls);
+  $('selAmPm').addEventListener('change', setHourFromControls);
+
+  $('rngMinute').addEventListener('input', e => {
+    state.live = false;
+    state.minute = +e.target.value;
+    renderAll();
+  });
+
+  $('btnNow').addEventListener('click', tick);
+
+  $('btnNew').addEventListener('click', newQuestion);
+  $('btnReveal').addEventListener('click', revealAnswer);
+  $('btnRight').addEventListener('click', answerRight);
+  $('btnWrong').addEventListener('click', answerWrong);
+
+  $('prevBtn').addEventListener('click', () => goStep(cur - 1));
+  $('nextBtn').addEventListener('click', () => goStep(cur + 1));
+
+  const dots = $('dots');
+  STEPS.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.className = 'dot';
+    b.setAttribute('aria-label', 'Step ' + (i + 1));
+    b.addEventListener('click', () => goStep(i));
+    dots.appendChild(b);
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('select, input')) return;
+    if (e.key === 'ArrowRight') goStep(cur + 1);
+    if (e.key === 'ArrowLeft') goStep(cur - 1);
+    if ((e.key === 'n' || e.key === 'N') && STEPS[cur].game) newQuestion();
+  });
+}
+
+setupControls();
+goStep(0);
+</script>
+</body>
+</html>
